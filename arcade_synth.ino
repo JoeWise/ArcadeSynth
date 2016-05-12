@@ -1,14 +1,14 @@
 #include "pitches.h"
 
 // Set pin numbers using constants
-const int LED_1 = 8;
-const int BUTTON_1 = 9;
-const int LED_2 = 2;
-const int BUTTON_2 = 3;
-const int LED_3 = 4;
-const int BUTTON_3 = 5;
-const int LED_4 = 6;
-const int BUTTON_4 = 7;
+const int LED_1 = 2;
+const int BUTTON_1 = 3;
+const int LED_2 = 4;
+const int BUTTON_2 = 5;
+const int LED_3 = 6;
+const int BUTTON_3 = 7;
+const int LED_4 = 8;
+const int BUTTON_4 = 9;
 const int LED_5 = 26;
 const int BUTTON_5 = 27;
 const int LED_6 = 28;
@@ -29,6 +29,10 @@ char curr_key = 'c';
 bool arpeggio = true;
 bool slide = false;
 
+// Globals for slide functionality
+int curr_button = -1;
+int prev_button = -1;
+    
 
 void setup() {
 // Set all Button pins as inputs
@@ -65,9 +69,10 @@ void loop(){
     int num_false = 0;
     int last_true = 0;
     for(i = 0; i < 8; i = i + 1){
-      if (digitalRead(buttons[i]) == LOW) {
+      if (digitalRead(buttons[i]) == HIGH) {
         curr_buttons[i] = true;
         last_true = i;
+//        digitalWrite(leds[i], LOW);
       }
       else{
         num_false = num_false + 1;
@@ -78,8 +83,8 @@ void loop(){
 //      Serial.println("no buttons being pressed");
       noTone(SPEAKER_PIN);
     }
-
     if (num_false == 7){
+
       tone(SPEAKER_PIN, determine_note(last_true));
     }
 
@@ -88,15 +93,18 @@ void loop(){
     // When only one button is being pressed, dont arpeggiate
     while (num_false == 7){
       // If that one button isn't being pressed anymore, break
-      if (digitalRead(buttons[last_true]) != LOW){
+      if (digitalRead(buttons[last_true]) != HIGH){
         noTone(SPEAKER_PIN);
+        digitalWrite(leds[last_true], HIGH);
         break;
       }
 
+      digitalWrite(leds[last_true], LOW);
+      
       // Check if any other buttons are being press, if so break.
       int j;
       for(j = 0; j < 8; j = j + 1){
-        if (j != last_true && digitalRead(buttons[j]) == LOW) {
+        if (j != last_true && digitalRead(buttons[j]) == HIGH) {
           curr_buttons[j] = true;
           last_true = j;
           goto multiple_notes_2;
@@ -110,79 +118,107 @@ void loop(){
       if (curr_buttons[i]) {
 //        Serial.print("multiple buttons pressed: "); Serial.println(i);
         tone(SPEAKER_PIN, determine_note(i));
+        digitalWrite(leds[i], LOW);
         delay(32);
+        digitalWrite(leds[i], HIGH);
       }
     }  
   }
 
   else if(slide){
-    bool curr_buttons[] = {false, false, false, false, false, false, false, false};
+    
     int i;
     int num_false = 0;
-    int last_true = 0;
-    // Determine which buttons are being pressed
+    
+ // Determine which buttons are being pressed
     for(i = 0; i < 8; i = i + 1){
-      if (digitalRead(buttons[i]) == LOW) {
-        curr_buttons[i] = true;
-        last_true = i;
+      if (digitalRead(buttons[i]) == HIGH) {
+        curr_button = i;
       }
       else{
         num_false = num_false + 1;
       }
     }
 
+    Serial.print("curr_button: "); Serial.println(curr_button);
+
     // If no buttons are being pressed, turn off the sound
     if (num_false == 8){
-//      Serial.println("no buttons being pressed");
       noTone(SPEAKER_PIN);
+      curr_button = -1;
+      Serial.println("no buttons being pressed");
     }
 
-    // If only one button is being pressed, play the corresponding note
-    if (num_false == 7){
-      tone(SPEAKER_PIN, determine_note(last_true));
+    if (curr_button != -1 && prev_button != -1 && curr_button != prev_button) {
+      int initial_note = determine_note(prev_button);
+      int end_note = determine_note(curr_button);
+      int in_between = initial_note;
+
+      Serial.print("initial_note: "); Serial.println(initial_note);
+      Serial.print("end_note: "); Serial.println(end_note);
+      
+      if(initial_note > end_note){
+        Serial.println("initial_note > end_note");
+        while(in_between >= end_note){
+          in_between = in_between - 10;
+          tone(SPEAKER_PIN, in_between);
+          delay(10);
+          Serial.print("in_between: "); Serial.println(in_between);
+        }
+      }
+      else{
+        Serial.println("initial_note < end_note");
+        while(in_between <= end_note){
+          in_between = in_between + 10;
+          tone(SPEAKER_PIN, in_between);
+          delay(10);
+          Serial.print("in_between: "); Serial.println(in_between);
+        }
+      }
     }
 
-    // When only one button is being pressed, dont arpeggiate
-    while (num_false == 7){
-      if (digitalRead(buttons[last_true]) != LOW){
+    if(curr_button != -1){
+      tone(SPEAKER_PIN, determine_note(curr_button));
+      Serial.print("play tone from curr_button: "); Serial.println(curr_button);
+    }
+    
+    while (true){
+      if (curr_button == -1 || digitalRead(buttons[curr_button]) != HIGH){
         noTone(SPEAKER_PIN);
+        Serial.println("stop playing tone");
+        curr_button = -1;
         break;
       }
       
-//    Serial.print("only one button being pressed: "); Serial.println(last_true);
       int j;
       for(j = 0; j < 8; j = j + 1){
-        if (j != last_true && digitalRead(buttons[j]) == LOW) {
-//          Serial.print("second button pressed: "); Serial.println(j);
-          curr_buttons[j] = true;
-          last_true = j;
+        if (j != curr_button && digitalRead(buttons[j]) == HIGH) {
+          prev_button = curr_button;
+          Serial.print("prev_button: "); Serial.println(prev_button);
+          
+          curr_button = j;
+          Serial.print("second button pressed: "); Serial.println(curr_button);
+          
           goto multiple_notes;
         }
       }
       delay(10);
     }
     multiple_notes:
-    
-    for(i = 0; i < 8; i = i + 1){
-      if (curr_buttons[i]) {
-//        Serial.print("multiple buttons pressed: "); Serial.println(i);
-        tone(SPEAKER_PIN, determine_note(i));
-        delay(32);
-      }
-    }  
+      int pointless;
+//      delay(1000);
 
-     
   }
   else {
     int i;
     for(i = 0; i < 8; i = i + 1){
-      if (digitalRead(buttons[i]) == LOW) {
+      if (digitalRead(buttons[i]) == HIGH) {
         Serial.print("i: "); Serial.println(i);
         tone(SPEAKER_PIN, determine_note(i));
         digitalWrite(leds[i], LOW);
 
         tone(SPEAKER_PIN, determine_note(i));
-        while (digitalRead(buttons[i]) == LOW) {
+        while (digitalRead(buttons[i]) == HIGH) {
 //        hold note
 //          bool new_note = false;
 //          int j;
